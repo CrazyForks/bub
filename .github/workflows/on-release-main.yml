@@ -22,20 +22,19 @@ jobs:
 
       - run: npx changelogithub
         continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
     runs-on: ubuntu-latest
     steps:
       - name: Check out
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
-
-      - name: Download updated pyproject.toml
-        uses: actions/download-artifact@v7
-        with:
-          name: pyproject-toml
 
       - name: Build package
         run: uv build
