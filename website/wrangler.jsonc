@@ -1,9 +1,4 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "bub-website",
-  "main": "./node_modules/@astrojs/cloudflare/dist/entrypoints/server.js",
-  "compatibility_date": "2026-04-15",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ]
+  "name": "bub"
 }

@@ -14,18 +14,22 @@ Connect the repository to a Cloudflare Worker using Git integration.
 
 Recommended settings:
 
-- Project name: `bub-website`
+- Project name: `bub`
 - Build command: `pnpm install --frozen-lockfile && pnpm build`
 - Deploy command: `pnpm wrangler deploy`
 - Path: `website`
 - Environment variable: `SITE_URL=https://bub.build`
 - Environment variable: `NODE_VERSION=22.16.0`
 
-The repo also includes [wrangler.jsonc](./wrangler.jsonc) so local preview and
-Cloudflare Workers runtime settings stay aligned:
+The repo keeps a minimal [wrangler.jsonc](./wrangler.jsonc) and relies on
+Astro/Wrangler's default Cloudflare integration for the generated Worker
+configuration.
 
-- `main = "./node_modules/@astrojs/cloudflare/dist/entrypoints/server.js"`
-- `compatibility_flags = ["nodejs_compat"]`
+The repo also includes [public/.assetsignore](./public/.assetsignore) for the
+SSR Worker build:
+
+- `_worker.js`
+- `_routes.json`
 
 Production deployment is handled by Cloudflare Workers Git integration instead of
 GitHub Actions.
