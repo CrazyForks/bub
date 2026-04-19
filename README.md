@@ -87,7 +87,7 @@ class EchoPlugin:
 echo = "my_package.plugin:EchoPlugin"
 ```
 
-See the [Extension Guide](https://bub.build/extension-guide/) for hook semantics and plugin packaging.
+See the [Extending docs](https://bub.build/docs/extending/) for hook semantics and plugin packaging.
 
 ## CLI
 
@@ -125,12 +125,12 @@ Read more: [Context from Tape](https://tape.systems) · [Socialized Evaluation a
 
 ## Docs
 
-- [Architecture](https://bub.build/architecture/) — lifecycle, hook precedence, error handling
-- [Features](https://bub.build/features/) — what ships today and current boundaries
-- [Channels](https://bub.build/channels/) — CLI, Telegram, and custom adapters
-- [Skills](https://bub.build/skills/) — discovery and authoring
-- [Extension Guide](https://bub.build/extension-guide/) — hooks, tools, plugin packaging
-- [Deployment](https://bub.build/deployment/) — Docker, environment, upgrades
+- [Architecture](https://bub.build/docs/concepts/architecture/) — lifecycle, hook precedence, error handling
+- [Features](https://bub.build/docs/concepts/features/) — what ships today and current boundaries
+- [Channels](https://bub.build/docs/guides/channels/) — CLI, Telegram, and custom adapters
+- [Skills](https://bub.build/docs/guides/skills/) — discovery and authoring
+- [Extending](https://bub.build/docs/extending/) — hooks, tools, plugin packaging
+- [Deployment](https://bub.build/docs/guides/deployment/) — Docker, environment, upgrades
 - [Posts](https://bub.build/posts/) — design notes
 
 ## Development

@@ -45,6 +45,7 @@ const locale = getLangFromUrl(Astro.url);
 const htmlLang = getHtmlLang(locale);
 const t = useTranslations(locale);
 const navProps = { ...getNavProps(locale, Astro.url.pathname), ...(Astro.props.navOverrides ?? {}) };
+const footerCopyright = `© ${new Date().getUTCFullYear()} Bub Contributors`;
 
 const { starsFormatted: stars } = await getRepoStats();
 
@@ -114,7 +115,7 @@ const ogImageUrl = new URL(ogImage, Astro.site ?? SITE_URL).href;
 
     <slot />
 
-    <Footer copyright={t('footer.copyright')} githubLabel={navProps.githubLabel} />
+    <Footer copyright={footerCopyright} githubLabel={navProps.githubLabel} />
 
     {backToTop && (
       <button

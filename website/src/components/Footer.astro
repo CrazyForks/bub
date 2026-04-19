@@ -9,7 +9,7 @@ interface Props {
 
 const {
   githubLabel = 'GitHub',
-  copyright = `© ${new Date().getFullYear()} Bub Contributors`,
+  copyright = `© ${new Date().getUTCFullYear()} Bub Contributors`,
 }: Props = Astro.props;
 ---
 

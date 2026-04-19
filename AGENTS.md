@@ -12,7 +12,7 @@ Core code lives under `src/`:
 - `src/bub/skills.py` / `src/bub/tools.py`: skill discovery and tool registry.
 - `src/skills/`: bundled skills shipped with Bub.
 
-Tests live in `tests/`. The legacy MkDocs sources still live in `docs/`, while the new website and docs runtime lives in `website/`.
+Tests live in `tests/`. The website and docs runtime lives in `website/`.
 
 ## Build, Test, and Development Commands
 

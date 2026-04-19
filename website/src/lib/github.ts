@@ -7,9 +7,11 @@
 //   • SSR  — the cache is shared across requests within the same server
 //             process and expires after 24 h, keeping API usage minimal.
 //
-// GITHUB_TOKEN is read from the environment at call time and is never
+// GITHUB_TOKEN is provided through Astro's server-only env API and is never
 // bundled into any client-side output.
 // ---------------------------------------------------------------------------
+
+import { GITHUB_TOKEN } from 'astro:env/server';
 
 export const REPO_OWNER = 'bubbuild';
 export const REPO_NAME = 'bub';
@@ -53,11 +55,10 @@ let _cache: Cache | null = null;
 // ---------------------------------------------------------------------------
 
 function buildHeaders(): HeadersInit {
-  const token = import.meta.env.GITHUB_TOKEN;
   return {
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(GITHUB_TOKEN ? { Authorization: `Bearer ${GITHUB_TOKEN}` } : {}),
   };
 }
 

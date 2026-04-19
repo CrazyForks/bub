@@ -36,9 +36,6 @@ export const ui = {
     'nav.menu': 'Menu',
     'nav.close': 'Close',
 
-    // Footer
-    'footer.copyright': `© ${new Date().getFullYear()} Bub Contributors`,
-
     // 404
     '404.title': 'Page not found.',
     '404.description': "The page you're looking for doesn't exist or has been moved.",
@@ -69,9 +66,6 @@ export const ui = {
     'nav.github': 'GitHub',
     'nav.menu': '菜单',
     'nav.close': '关闭',
-
-    // Footer
-    'footer.copyright': `© ${new Date().getFullYear()} Bub Contributors`,
 
     // 404
     '404.title': '页面不存在。',
