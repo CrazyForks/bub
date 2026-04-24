@@ -74,8 +74,6 @@ class BubFramework:
             else:
                 pending_plugins.append((entry_point.name, plugin))
 
-        configure.load(self._config_file)
-
         for plugin_name, plugin in pending_plugins:
             try:
                 if callable(plugin):  # Support entry points that are classes
@@ -86,6 +84,8 @@ class BubFramework:
                 self._plugin_status[plugin_name] = PluginStatus(is_success=False, detail=str(exc))
             else:
                 self._plugin_status[plugin_name] = PluginStatus(is_success=True)
+
+        configure.load(self._config_file)
 
     def create_cli_app(self) -> typer.Typer:
         """Create CLI app by collecting commands from hooks. Can be used for custom CLI entry point."""
