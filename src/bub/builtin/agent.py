@@ -41,7 +41,7 @@ from bub.utils import workspace_from_state
 CONTINUE_PROMPT = "Continue the task."
 HINT_RE = re.compile(r"\$([A-Za-z0-9_.-]+)")
 _CONTEXT_LENGTH_PATTERNS = re.compile(
-    r"context.{0,20}length|maximum.{0,20}context|token.{0,10}limit|prompt.{0,10}too long|tokens? > \d+ maximum",
+    r"context.{0,20}(?:length|window)|maximum.{0,20}context|token.{0,10}limit|prompt.{0,10}too long|tokens? > \d+ maximum",
     re.IGNORECASE,
 )
 MAX_AUTO_HANDOFF_RETRIES = 1
