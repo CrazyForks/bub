@@ -15,6 +15,8 @@ Telegram 是当前 Bub 核心中内置的远程 channel 适配器。
 BUB_TELEGRAM_TOKEN=123456:token
 ```
 
+在群聊中使用时，必须在 BotFather 中关闭机器人的 Privacy mode。Bub 需要接收非命令群消息，才能由 channel filter 和 debounce 逻辑判断是否响应。
+
 可选白名单（逗号分隔）：
 
 ```bash
