@@ -288,7 +288,7 @@ class BubFramework:
     def collect_onboard_config(self) -> dict[str, Any]:
         current_config: dict[str, Any] = {}
 
-        for impl in self._hook_runtime._iter_hookimpls("onboard_config"):
+        for impl in reversed(list(self._hook_runtime._iter_hookimpls("onboard_config"))):
             result = self._hook_runtime._invoke_impl_sync(
                 hook_name="onboard_config",
                 impl=impl,

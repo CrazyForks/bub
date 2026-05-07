@@ -52,7 +52,11 @@ def test_onboard_collects_plugin_config_and_writes_file(tmp_path: Path, monkeypa
         class OnboardPlugin:
             @hookimpl
             def onboard_config(self, current_config):
-                assert current_config == {}
+                assert isinstance(current_config.get("model"), str)
+                assert current_config["api_format"] == "completion"
+                assert current_config["enabled_channels"] == "telegram"
+                assert current_config["stream_output"] is False
+                assert "telegram" not in current_config
                 return {
                     "model": cli.typer.prompt("Model", default="openai:gpt-5"),
                     "telegram": {"token": cli.typer.prompt("Telegram token", hide_input=True)},
@@ -61,13 +65,7 @@ def test_onboard_collects_plugin_config_and_writes_file(tmp_path: Path, monkeypa
         framework._plugin_manager.register(OnboardPlugin(), name="onboard-plugin")
         app = framework.create_cli_app()
 
-        answers = iter([
-            "openai:gpt-5",
-            "123:abc",
-            "openai:gpt-5",
-            "",
-            "",
-        ])
+        answers = iter(["openai:gpt-5", "123:abc"])
         monkeypatch.setattr(
             cli.typer,
             "prompt",
