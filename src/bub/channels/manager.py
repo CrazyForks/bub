@@ -118,11 +118,16 @@ class ChannelManager:
 
     async def quit(self, session_id: str) -> None:
         tasks = self._ongoing_tasks.pop(session_id, set())
+        current_task = asyncio.current_task()
+        cancelled_count = 0
         for task in tasks:
+            if task is current_task:
+                continue
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
-        logger.info(f"channel.manager quit session_id={session_id}, cancelled {len(tasks)} tasks")
+            cancelled_count += 1
+        logger.info(f"channel.manager quit session_id={session_id}, cancelled {cancelled_count} tasks")
 
     def enabled_channels(self) -> list[Channel]:
         if "all" in self._enabled_channels:
@@ -133,7 +138,10 @@ class ChannelManager:
         ]
 
     def _on_task_done(self, session_id: str, task: asyncio.Task) -> None:
-        task.exception()  # to log any exception
+        if task.cancelled():
+            logger.info("channel.manager task cancelled session_id={}", session_id)
+        else:
+            task.exception()  # to log any exception
         tasks = self._ongoing_tasks.get(session_id, set())
         tasks.discard(task)
         if not tasks:

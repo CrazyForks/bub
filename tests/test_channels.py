@@ -301,6 +301,45 @@ async def test_channel_manager_quit_cancels_only_matching_session_tasks(load_con
         await other_task
 
 
+@pytest.mark.asyncio
+async def test_channel_manager_quit_skips_current_task(load_config) -> None:
+    _load_channel_config(load_config, enabled_channels="telegram")
+    manager = ChannelManager(FakeFramework({"telegram": FakeChannel("telegram")}), enabled_channels=["telegram"])
+
+    async def never_finish() -> None:
+        await asyncio.sleep(10)
+
+    current_task = asyncio.current_task()
+    assert current_task is not None
+    target_task = asyncio.create_task(never_finish())
+    manager._ongoing_tasks["session:target"] = {current_task, target_task}
+
+    await manager.quit("session:target")
+
+    assert current_task.cancelled() is False
+    assert target_task.cancelled()
+    assert "session:target" not in manager._ongoing_tasks
+
+
+@pytest.mark.asyncio
+async def test_channel_manager_done_callback_handles_cancelled_task(load_config) -> None:
+    _load_channel_config(load_config, enabled_channels="telegram")
+    manager = ChannelManager(FakeFramework({"telegram": FakeChannel("telegram")}), enabled_channels=["telegram"])
+
+    async def never_finish() -> None:
+        await asyncio.sleep(10)
+
+    task = asyncio.create_task(never_finish())
+    manager._ongoing_tasks["session:target"] = {task}
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+    manager._on_task_done("session:target", task)
+
+    assert "session:target" not in manager._ongoing_tasks
+
+
 def test_cli_channel_normalize_input_prefixes_shell_commands() -> None:
     channel = CliChannel.__new__(CliChannel)
     channel._mode = "shell"
