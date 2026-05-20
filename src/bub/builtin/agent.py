@@ -38,7 +38,7 @@ from bub.tools import REGISTRY, model_tools, render_tools_prompt
 from bub.types import State
 from bub.utils import workspace_from_state
 
-CONTINUE_PROMPT = "Continue the task."
+CONTINUE_PROMPT = "Continue the task until all targets are completed."
 HINT_RE = re.compile(r"\$([A-Za-z0-9_.-]+)")
 _CONTEXT_LENGTH_PATTERNS = re.compile(
     r"context.{0,20}(?:length|window)|maximum.{0,20}context|token.{0,10}limit|prompt.{0,10}too long|tokens? > \d+ maximum",
