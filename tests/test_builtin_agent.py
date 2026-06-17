@@ -9,14 +9,25 @@ import pytest
 from any_llm.types.completion import ChatCompletionChunk
 
 from bub.builtin.agent import Agent
+from bub.builtin.model_runner import ModelRunner
 from bub.builtin.settings import AgentSettings
 from bub.runtime import BubError
-from bub.tape import Tape, TapeContext
+from bub.tape import TapeContext
 from bub.tools import REGISTRY, tool
 
 # ---------------------------------------------------------------------------
 # Agent.run() tests: merge_back logic and model passthrough
 # ---------------------------------------------------------------------------
+
+
+class _FakeModelRunner(ModelRunner):
+    def __init__(self, settings: AgentSettings) -> None:
+        super().__init__(settings)
+        self.completion_kwargs: dict[str, Any] | None = None
+
+    async def completion_response(self, **kwargs: Any) -> AsyncIterator[ChatCompletionChunk]:
+        self.completion_kwargs = kwargs
+        return _chat_stream("done")
 
 
 def _make_agent() -> Agent:
@@ -30,14 +41,13 @@ def _make_agent() -> Agent:
 
     agent.settings = AgentSettings.model_construct(model="test:model", api_key="k", api_base="b", client_args={})
     agent.framework = framework
-
-    async def fake_completion_response(**kwargs: Any) -> AsyncIterator[ChatCompletionChunk]:
-        agent.completion_kwargs = kwargs
-        return _chat_stream("done")
-
-    agent.completion_kwargs = None
-    agent._completion_response = fake_completion_response  # type: ignore[method-assign]
+    agent.model_runner = _FakeModelRunner(agent.settings)
     return agent
+
+
+def _model_runner(agent: Agent) -> _FakeModelRunner:
+    assert isinstance(agent.model_runner, _FakeModelRunner)
+    return agent.model_runner
 
 
 def _chat_chunk(content: str) -> ChatCompletionChunk:
@@ -76,35 +86,33 @@ class _ForkCapture:
             self.exit_count += 1
 
 
-class _FakeTapeService:
-    """Minimal TapeService stand-in for testing Agent.run()."""
+class _FakeTape:
+    """Scoped tape stand-in for testing Agent.run()."""
 
     def __init__(self, fork_capture: _ForkCapture) -> None:
         self._fork = fork_capture
+        self.name = "test-tape"
+        self.context = TapeContext(state={})
         self.messages: list[dict[str, Any]] = []
         self.events: list[tuple[str, str, dict[str, Any]]] = []
 
-    def session_tape(self, session_id: str, workspace: Any) -> Tape:
-        return Tape(name="test-tape", context=TapeContext(state={}))
-
-    async def ensure_bootstrap_anchor(self, tape_name: str) -> None:
+    async def ensure_bootstrap_anchor(self) -> None:
         pass
 
     @contextlib.asynccontextmanager
-    async def fork_tape(self, tape_name: str, merge_back: bool = True) -> AsyncGenerator[None, None]:
-        async with self._fork.fork_tape(tape_name, merge_back=merge_back):
-            yield
+    async def fork_tape(self, merge_back: bool = True) -> AsyncGenerator[_FakeTape, None]:
+        async with self._fork.fork_tape(self.name, merge_back=merge_back):
+            yield self
 
-    async def read_messages(self, tape: Tape) -> list[dict[str, Any]]:
+    async def read_messages(self) -> list[dict[str, Any]]:
         return list(self.messages)
 
-    async def append_event(self, tape_name: str, name: str, payload: dict[str, Any], **meta: Any) -> None:
-        self.events.append((tape_name, name, payload))
+    async def append_event(self, name: str, payload: dict[str, Any], **meta: Any) -> None:
+        self.events.append((self.name, name, payload))
 
     async def record_chat(
         self,
         *,
-        tape: str,
         run_id: str,
         system_prompt: str | None,
         new_messages: list[dict[str, Any]],
@@ -119,19 +127,33 @@ class _FakeTapeService:
         usage: dict[str, Any] | None = None,
     ) -> None:
         if system_prompt:
-            self.events.append((tape, "system", {"content": system_prompt}))
+            self.events.append((self.name, "system", {"content": system_prompt}))
         if context_error is not None:
-            self.events.append((tape, "error", context_error.as_dict()))
+            self.events.append((self.name, "error", context_error.as_dict()))
         self.messages.extend(new_messages)
         if tool_calls:
-            self.events.append((tape, "tool_call", {"calls": tool_calls}))
+            self.events.append((self.name, "tool_call", {"calls": tool_calls}))
         if tool_results is not None:
-            self.events.append((tape, "tool_result", {"results": tool_results}))
+            self.events.append((self.name, "tool_result", {"results": tool_results}))
         if error is not None and error is not context_error:
-            self.events.append((tape, "error", error.as_dict()))
+            self.events.append((self.name, "error", error.as_dict()))
         if response_text is not None:
             self.messages.append({"role": "assistant", "content": response_text})
-        self.events.append((tape, "run", {"run_id": run_id, "model": model, "error": error is not None}))
+        self.events.append((self.name, "run", {"run_id": run_id, "model": model, "error": error is not None}))
+
+
+class _FakeTapeFactory:
+    """Minimal tape factory stand-in for testing Agent.run()."""
+
+    def __init__(self, fork_capture: _ForkCapture) -> None:
+        self.tape = _FakeTape(fork_capture)
+        self.context = self.tape.context
+
+    def session_tape(self, session_id: str, workspace: Any, context: TapeContext | None = None) -> _FakeTape:
+        if context is not None:
+            self.tape.context = context
+            self.context = context
+        return self.tape
 
 
 @pytest.mark.asyncio
@@ -139,7 +161,7 @@ async def test_agent_run_regular_session_merges_back() -> None:
     """A regular (non-temp) session should merge tape entries back."""
     agent = _make_agent()
     fork_capture = _ForkCapture()
-    agent.tapes = _FakeTapeService(fork_capture)  # type: ignore[assignment]
+    agent.tape = _FakeTapeFactory(fork_capture)  # type: ignore[assignment]
 
     result = await agent.run_stream(session_id="user/session1", prompt="hello", state={"_runtime_workspace": "/tmp"})  # noqa: S108
 
@@ -157,7 +179,7 @@ async def test_agent_run_temp_session_does_not_merge_back() -> None:
     """A temp/ session should NOT merge tape entries back."""
     agent = _make_agent()
     fork_capture = _ForkCapture()
-    agent.tapes = _FakeTapeService(fork_capture)  # type: ignore[assignment]
+    agent.tape = _FakeTapeFactory(fork_capture)  # type: ignore[assignment]
 
     result = await agent.run_stream(session_id="temp/abc123", prompt="hello", state={"_runtime_workspace": "/tmp"})  # noqa: S108
 
@@ -175,8 +197,8 @@ async def test_agent_run_passes_model_to_llm() -> None:
     """The model parameter should be forwarded to any-llm."""
     agent = _make_agent()
     fork_capture = _ForkCapture()
-    fake_tapes = _FakeTapeService(fork_capture)
-    agent.tapes = fake_tapes  # type: ignore[assignment]
+    fake_tapes = _FakeTapeFactory(fork_capture)
+    agent.tape = fake_tapes  # type: ignore[assignment]
 
     result = await agent.run_stream(
         session_id="user/s1",
@@ -186,13 +208,15 @@ async def test_agent_run_passes_model_to_llm() -> None:
     )
     [event async for event in result]
 
-    assert agent.completion_kwargs["model"] == "openai:gpt-4o"
+    completion_kwargs = _model_runner(agent).completion_kwargs
+    assert completion_kwargs is not None
+    assert completion_kwargs["model"] == "openai:gpt-4o"
 
 
 @pytest.mark.asyncio
 async def test_agent_run_empty_prompt_returns_error() -> None:
     agent = _make_agent()
-    agent.tapes = MagicMock()  # type: ignore[assignment]
+    agent.tape = MagicMock()
 
     result = await agent.run_stream(session_id="user/s1", prompt="", state={})
     events = [event async for event in result]
@@ -208,13 +232,15 @@ async def test_agent_run_model_defaults_to_none() -> None:
     """When model is not specified, settings.model is used for any-llm."""
     agent = _make_agent()
     fork_capture = _ForkCapture()
-    fake_tapes = _FakeTapeService(fork_capture)
-    agent.tapes = fake_tapes  # type: ignore[assignment]
+    fake_tapes = _FakeTapeFactory(fork_capture)
+    agent.tape = fake_tapes  # type: ignore[assignment]
 
     result = await agent.run_stream(session_id="user/s1", prompt="hello", state={"_runtime_workspace": "/tmp"})  # noqa: S108
     [event async for event in result]
 
-    assert agent.completion_kwargs["model"] == "test:model"
+    completion_kwargs = _model_runner(agent).completion_kwargs
+    assert completion_kwargs is not None
+    assert completion_kwargs["model"] == "test:model"
 
 
 @pytest.mark.asyncio
@@ -234,8 +260,8 @@ async def test_agent_run_resolves_allowed_tool_aliases_and_limits_prompt() -> No
 
     agent = _make_agent()
     fork_capture = _ForkCapture()
-    fake_tapes = _FakeTapeService(fork_capture)
-    agent.tapes = fake_tapes  # type: ignore[assignment]
+    fake_tapes = _FakeTapeFactory(fork_capture)
+    agent.tape = fake_tapes  # type: ignore[assignment]
 
     result = await agent.run_stream(
         session_id="user/s1",
@@ -245,9 +271,10 @@ async def test_agent_run_resolves_allowed_tool_aliases_and_limits_prompt() -> No
     )
     [event async for event in result]
 
-    assert agent.completion_kwargs is not None
-    assert [tool.name for tool in agent.completion_kwargs["tools"]] == ["tests_allowed_agent_tool"]
-    system_prompt = agent.completion_kwargs["messages"][0]["content"]
+    completion_kwargs = _model_runner(agent).completion_kwargs
+    assert completion_kwargs is not None
+    assert [tool.name for tool in completion_kwargs["tools"]] == ["tests_allowed_agent_tool"]
+    system_prompt = completion_kwargs["messages"][0]["content"]
     assert "- tests_allowed_agent_tool(): Allowed tool" in system_prompt
     assert "tests_denied_agent_tool" not in system_prompt
 
@@ -256,8 +283,8 @@ async def test_agent_run_resolves_allowed_tool_aliases_and_limits_prompt() -> No
 async def test_agent_run_rejects_unknown_allowed_tools() -> None:
     agent = _make_agent()
     fork_capture = _ForkCapture()
-    fake_tapes = _FakeTapeService(fork_capture)
-    agent.tapes = fake_tapes  # type: ignore[assignment]
+    fake_tapes = _FakeTapeFactory(fork_capture)
+    agent.tape = fake_tapes  # type: ignore[assignment]
 
     stream = await agent.run_stream(
         session_id="user/s1",
