@@ -70,6 +70,23 @@ class BuiltinImpl:
             self._agent = Agent(self.framework)
         return self._agent
 
+    async def _recover_session_model(self, session_id: str) -> str | None:
+        """Recover the latest per-session model override recorded on the session tape.
+
+        The ``model`` tool records each switch as a ``model_switch`` event on the
+        session's tape. Scanning that tape here (before the per-turn fork exists)
+        reads the persisted store, so a choice from a prior turn or restart is
+        restored. Returns ``None`` when nothing was recorded, so a fresh session
+        never inherits another session's model.
+        """
+        session = self._get_agent().tape.session_tape(session_id, self.framework.workspace)
+        entries = list(await session.store.fetch_all(session.query().kinds("event")))
+        for entry in reversed(entries):
+            if entry.kind == "event" and entry.payload.get("name") == "model_switch":
+                model = (entry.payload.get("data") or {}).get("model")
+                return str(model) if model else None
+        return None
+
     @staticmethod
     async def _discard_message(_: ChannelMessage) -> None:
         return
@@ -118,6 +135,11 @@ class BuiltinImpl:
         state = {"session_id": session_id, "_runtime_agent": self._get_agent()}
         if context := field_of(message, "context_str"):
             state["context"] = context
+        # Carry over a previously recorded per-session model override from the
+        # session tape. Only set when a prior turn actually recorded one, so a
+        # fresh/unknown session never inherits another session's model.
+        if model := await self._recover_session_model(session_id):
+            state["model"] = model
         return state
 
     @hookimpl
@@ -126,6 +148,9 @@ class BuiltinImpl:
         lifespan = field_of(message, "lifespan")
         if lifespan is not None:
             await lifespan.__aexit__(tp, value, traceback)
+        # The per-session model override is persisted on the session tape by the
+        # ``model`` tool itself (a ``model_switch`` event, merged back at end of
+        # turn), so nothing to write here — this hook only closes the lifespan.
 
     @hookimpl
     async def build_prompt(self, message: ChannelMessage, session_id: str, state: State) -> str | list[dict]:
@@ -158,7 +183,12 @@ class BuiltinImpl:
 
     @hookimpl
     async def run_model_stream(self, prompt: str | list[dict], session_id: str, state: State) -> AsyncStreamEvents:
-        return await self._get_agent().run_stream(session_id=session_id, prompt=prompt, state=state)
+        return await self._get_agent().run_stream(
+            session_id=session_id,
+            prompt=prompt,
+            state=state,
+            model=state.get("model"),
+        )
 
     @hookimpl
     def register_cli_commands(self, app: typer.Typer) -> None:
