@@ -10,6 +10,7 @@ from bub import inquirer as bub_inquirer
 from bub.builtin.agent import Agent
 from bub.builtin.context import default_tape_context
 from bub.builtin.settings import DEFAULT_MODEL
+from bub.builtin.steering import InMemorySteeringInbox
 from bub.channels.base import Channel
 from bub.channels.message import ChannelMessage, MediaItem
 from bub.envelope import content_of, field_of
@@ -18,7 +19,7 @@ from bub.hookspecs import hookimpl
 from bub.runtime import AsyncStreamEvents
 from bub.tape import TapeContext, TapeStore
 from bub.turn_admission import AdmitDecision, TurnSnapshot
-from bub.types import Envelope, MessageHandler, State
+from bub.types import Envelope, MessageHandler, State, SteeringInboxProtocol
 
 AGENTS_FILE_NAME = "AGENTS.md"
 MODEL_PROVIDER_CHOICES: tuple[str, ...] = (
@@ -140,6 +141,8 @@ class BuiltinImpl:
         # fresh/unknown session never inherits another session's model.
         if model := await self._recover_session_model(session_id):
             state["model"] = model
+        if thread_id := field_of(message, "context", {}).get("thread_id"):
+            state["_runtime_thread_id"] = thread_id
         return state
 
     @hookimpl
@@ -324,7 +327,11 @@ class BuiltinImpl:
         return default_tape_context()
 
     @hookimpl
-    def admit_message(
+    def provide_steering_inbox(self) -> SteeringInboxProtocol:
+        return InMemorySteeringInbox()
+
+    @hookimpl
+    async def admit_message(
         self,
         session_id: str,
         message: Envelope,
@@ -333,4 +340,4 @@ class BuiltinImpl:
         outbound_router = self.framework._outbound_router
         if outbound_router is None:
             return None
-        return outbound_router.admit_channel_message(session_id=session_id, message=message, turn=turn)
+        return await outbound_router.admit_channel_message(session_id=session_id, message=message, turn=turn)
